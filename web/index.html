@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Accounts & Steam Guard</title>
+
+  <!-- Google Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="title">Accounts & Steam Guard</div>
+  </header>
+
+  <!-- License strip -->
+  <div id="licStrip" class="license-strip hidden">
+    <div id="licIcon" class="badge">Status</div>
+    <div id="licText" class="lic-text"></div>
+    <div class="license-actions">
+      <button class="btn" id="btnActivate">Activate</button>
+    </div>
+  </div>
+
+  <!-- Search -->
+  <div class="searchbar" role="search">
+    <input id="search" type="search" placeholder="Search by game name or AppID…" aria-label="Search games" />
+    <button class="btn" id="clearBtn">Clear</button>
+  </div>
+
+  <main class="layout">
+    <section>
+      <div id="grid" class="cardgrid"></div>
+      <div id="emptyNote" class="ghost hidden">No games match your search.</div>
+    </section>
+
+    <!-- Right panel -->
+    <aside id="panel" class="panel animate-in">
+      <div id="heroWrap" class="hero empty">
+        <img id="heroCover" alt="" />
+        <div id="heroPlaceholder">Please select a game to show details</div>
+      </div>
+
+      <div id="gameTitle" class="detail-title">Select a game</div>
+      <div id="gameSub" class="detail-sub"></div>
+
+      <div class="row">
+        <div class="label">Username</div>
+        <input id="username" type="text" readonly />
+      </div>
+      <div class="row">
+        <div class="label">Password</div>
+        <input id="password" type="password" readonly />
+        <button class="btn" id="btnShow" type="button">Show</button>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="btnFetch" type="button">Fetch Steam Guard Code</button>
+      </div>
+      <div id="code" class="code">— — — — —</div>
+      <div id="status" class="ghost statusline"></div>
+    </aside>
+  </main>
+
+  <!-- Bottom-center pagination -->
+  <nav class="pager-fixed" id="pager" aria-label="Pagination">
+    <button class="pagebtn" id="prevBtn" aria-label="Previous page">«</button>
+    <div class="pageinfo" id="pageInfo">Page 1 / 1</div>
+    <button class="pagebtn" id="nextBtn" aria-label="Next page">»</button>
+  </nav>
+
+  <!-- Activation Modal (also for expired / not-activated) -->
+  <div id="actBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="actTitle">
+    <div class="modal animate-in">
+      <h3 id="actTitle">Activate License</h3>
+
+      <div id="actExpired" class="warn hidden"></div>
+
+<div class="row">
+  <div class="label">CD-Key</div>
+  <input id="actKey" placeholder="xxxx-xxxx-xxxx-xxxx-xxxxxxxx" autocomplete="one-time-code">
+</div>
+
+<div class="row">
+  <div class="label">Steam Account</div>
+  <select id="actSteamSel" aria-label="Steam account"></select>
+  <input id="actSteam" type="text" style="display:none">
+</div>
+      <div class="note" id="steamPickHint">
+        Pick the account to bind this license. The most recent account is selected by default.
+      </div>
+
+      <div class="note">First activation sets your plan duration (3M / 6M / 1Y). The key binds to this SteamID.</div>
+      <div class="actions">
+        <button class="btn" id="btnActCancel" type="button">Cancel</button>
+        <button class="btn primary" id="btnActDo" type="button">Activate</button>
+      </div>
+      <div id="actMsg" class="ghost mt-6"></div>
+    </div>
+  </div>
+
+  <script defer src="app.js"></script>
+</body>
+</html>
