@@ -375,3 +375,38 @@ body{
 /* Utility */
 .hidden{ display: none !important; }
 .mt-6{ margin-top: 6px; }
+/* ---- Brand / Header Logo ---- */
+.app-header{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:10px 14px;
+}
+
+.brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-right:auto; /* push other header actions to the right */
+}
+
+.brand-logo{
+  width:28px;
+  height:28px;
+  object-fit:contain;
+  border-radius:8px;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,.35));
+}
+
+.brand-title{
+  font-weight:600;
+  font-size:15px;
+  letter-spacing:.2px;
+  opacity:.95;
+}
+
+/* Small screens: hide text, keep icon */
+@media (max-width:640px){
+  .brand-title{ display:none; }
+}
+
