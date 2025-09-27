@@ -28,6 +28,12 @@ let selectedAppId = null;
 // Steam users (from loginusers.vdf)
 let STEAM_USERS = [];
 
+let GRID_LOCKED = false;
+function setGridLocked(lock) {
+  GRID_LOCKED = !!lock;
+  GRID.classList.toggle('locked', GRID_LOCKED);
+}
+
 // UI refs
 const GRID = $("grid");
 const EMPTY = $("emptyNote");
@@ -148,7 +154,7 @@ function updateActivationDependentUI(st){
       if (card.classList.contains("disabled")) {
         card.classList.remove("disabled");
         card.title = "";
-        card.onclick = () => selectGame(appid, card);
+        card.onclick = () => { if (GRID_LOCKED) return; selectGame(appid, card); };
       }
     } else {
       if (!card.classList.contains("disabled")) {
@@ -430,7 +436,7 @@ function makeCard(g){
       expiry_date: CURRENT_LICENSE && CURRENT_LICENSE.expiry_date
     });
   } else {
-    d.onclick = () => selectGame(g.appid, d);
+    d.onclick = () => { if (GRID_LOCKED) return; selectGame(g.appid, d); };
   }
   return d;
 }
@@ -500,7 +506,11 @@ function togglePw(){
 
 async function fetchCode(){
   const uname = $("username").value.trim();
-  if(!uname){ $("code").textContent = "— — — — —"; setStatus("Please enter username."); return; }
+  if(!uname){
+    $("code").textContent = "— — — — —";
+    setStatus("Please enter username.");
+    return;
+  }
 
   if(!CURRENT_LICENSE || CURRENT_LICENSE.status !== "active"){
     openActivate({
@@ -512,9 +522,15 @@ async function fetchCode(){
   }
 
   setStatus("Fetching code…");
-  try{
+
+  // 🔒 lock the grid & disable button
+  setGridLocked(true);
+  BTN_FETCH.disabled = true;
+
+  try {
     const r = await fetch("/api/latest-code?username=" + encodeURIComponent(uname));
     const j = await r.json();
+
     if(j.status === "ok"){
       $("code").textContent = j.code;
       setStatus("Latest code loaded.");
@@ -532,9 +548,13 @@ async function fetchCode(){
     } else {
       setStatus("Unknown response.");
     }
-  }catch(e){
+  } catch(e) {
     $("code").textContent = "— — — — —";
     setStatus("Request failed.");
+  } finally {
+    // 🔓 always unlock the grid & re-enable button
+    BTN_FETCH.disabled = false;
+    setGridLocked(false);
   }
 }
 

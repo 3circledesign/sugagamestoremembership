@@ -633,3 +633,5 @@ body{
 @keyframes fadeIn{ from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none} }
 @keyframes slideUp{ from{opacity:0; transform:translateY(12px)} to{opacity:1; transform:none} }
 
+.cardgrid.locked .card { pointer-events: none; cursor: not-allowed; }
+.cardgrid.locked .card .cover { filter: grayscale(20%); opacity: .7; }
