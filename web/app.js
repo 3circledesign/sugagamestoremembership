@@ -561,6 +561,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadLicense();
   await loadGames();
 
-  setInterval(loadLicense, 60_000);
+  setInterval(loadLicense, 15_000);
   window.addEventListener("resize", (()=>{ let t; return ()=>{ clearTimeout(t); t=setTimeout(render,120); }; })());
 });

@@ -13,16 +13,14 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="suga_logo.png">
   <meta name="theme-color" content="#1c1f2a">
-
 </head>
 <body>
   <header class="app-header">
     <!-- Brand / Logo -->
-<div class="brand">
-  <img class="brand-logo" src="suga_logo.png" alt="Logo" onerror="this.style.display='none'">
-  <div class="brand-title">Suga Game Store</div>
-</div>
-
+    <div class="brand">
+      <img class="brand-logo" src="suga_logo.png" alt="Logo" onerror="this.style.display='none'">
+      <div class="brand-title">Suga Game Store</div>
+    </div>
   </header>
 
   <!-- License strip -->
@@ -59,16 +57,47 @@
       <div class="row">
         <div class="label">Username</div>
         <input id="username" type="text" readonly />
+        <button class="icon-btn" onclick="copyField('username')" aria-label="Copy username" title="Copy username">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
       </div>
+
       <div class="row">
         <div class="label">Password</div>
         <input id="password" type="password" readonly />
         <button class="btn" id="btnShow" type="button">Show</button>
+        <button class="icon-btn" onclick="copyField('password')" aria-label="Copy password" title="Copy password">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
       </div>
+
       <div class="row">
         <button class="btn primary" id="btnFetch" type="button">Fetch Steam Guard Code</button>
       </div>
-      <div id="code" class="code">— — — — —</div>
+
+<div id="codeWrap" class="row">
+    <div id="code" class="code">
+      <div class="placeholders" aria-hidden="true">‒ ‒ ‒ ‒ ‒</div>
+      <div class="digits" id="codeDigits"></div>
+    </div>
+    <button class="icon-btn" onclick="copyCode()" aria-label="Copy Steam Guard code" title="Copy code">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+    </button>
+  </div>
+
+
       <div id="status" class="ghost statusline"></div>
     </aside>
   </main>
@@ -80,27 +109,21 @@
     <button class="pagebtn" id="nextBtn" aria-label="Next page">»</button>
   </nav>
 
-  <!-- Activation Modal (also for expired / not-activated) -->
+  <!-- Activation Modal -->
   <div id="actBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="actTitle">
     <div class="modal animate-in">
       <h3 id="actTitle">Activate License</h3>
-
       <div id="actExpired" class="warn hidden"></div>
-
-<div class="row">
-  <div class="label">CD-Key</div>
-  <input id="actKey" placeholder="xxxx-xxxx-xxxx-xxxx-xxxxxxxx" autocomplete="one-time-code">
-</div>
-
-<div class="row">
-  <div class="label">Steam Account</div>
-  <select id="actSteamSel" aria-label="Steam account"></select>
-  <input id="actSteam" type="text" style="display:none">
-</div>
-      <div class="note" id="steamPickHint">
-        Pick the account to bind this license. The most recent account is selected by default.
+      <div class="row">
+        <div class="label">CD-Key</div>
+        <input id="actKey" placeholder="xxxx-xxxx-xxxx-xxxx-xxxxxxxx" autocomplete="one-time-code">
       </div>
-
+        <div class="row">
+          <div class="label">Steam Account</div>
+          <select id="actSteamSel" aria-label="Steam account"></select>
+          <input id="actSteam" type="text" style="display:none">
+        </div>
+      <div class="note" id="steamPickHint">Pick the account to bind this license. The most recent account is selected by default.</div>
       <div class="note">First activation sets your plan duration (3M / 6M / 1Y). The key binds to this SteamID.</div>
       <div class="actions">
         <button class="btn" id="btnActCancel" type="button">Cancel</button>
@@ -110,6 +133,51 @@
     </div>
   </div>
 
+  <!-- Toast -->
+  <div id="toast" class="toast" role="status" aria-live="polite">Copied</div>
+
   <script defer src="app.js"></script>
+  <script>
+    function showToast() {
+      const t = document.getElementById('toast');
+      if (!t) return;
+      t.classList.add('show');
+      clearTimeout(showToast._tid);
+      showToast._tid = setTimeout(() => t.classList.remove('show'), 1200);
+    }
+    function copyField(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const val = el.value ?? '';
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(val).then(showToast);
+      } else {
+        // Fallback
+        el.select();
+        document.execCommand('copy');
+        showToast();
+      }
+    }
+    function copyCode() {
+      const codeEl = document.getElementById('code');
+      if (!codeEl) return;
+      const text = codeEl.innerText.replace(/\s+/g, '').trim();
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(showToast);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast();
+      }
+    }
+    function setCodeDigits(code) {
+      document.getElementById('codeDigits').textContent =
+        code.split('').join(' ');
+    }
+  </script>
 </body>
 </html>
