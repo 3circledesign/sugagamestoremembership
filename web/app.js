@@ -545,6 +545,38 @@ async function loadGames(){
   render();
 }
 
+async function refreshGameList(){
+  const btn = document.getElementById("btnRefresh");
+  try{
+    setStatus("Refreshing game list…");
+    setGridLocked(true);
+    if (btn) { btn.disabled = true; btn.textContent = "Refreshing…"; }
+
+    // POST to backend
+    const r = await fetch("/api/games/refresh", { method: "POST" });
+    const j = await r.json().catch(()=> ({}));
+
+    if (!r.ok || !j.ok){
+      const msg = (j && (j.message || j.error)) || ("HTTP " + r.status);
+      setStatus("Refresh failed: " + msg);
+      return;
+    }
+
+    // success → reload UI
+    // reset to first page, hide the side panel, reload games
+    page = 1;
+    if (typeof hidePanel === "function") hidePanel();
+    await loadGames();
+    setStatus(`Game list updated (${j.count ?? "?"} items).`);
+  }catch(e){
+    setStatus("Refresh error: " + e);
+  }finally{
+    setGridLocked(false);
+    if (btn) { btn.disabled = false; btn.textContent = "Refresh"; }
+  }
+}
+
+
 async function selectGame(appid, cardEl){
   document.querySelectorAll(".card.selected").forEach(el => el.classList.remove("selected"));
   cardEl?.classList.add("selected");
@@ -686,6 +718,8 @@ async function loginToSteam(){
 document.addEventListener("DOMContentLoaded", async () => {
   // Guard these in case stubs are missing
   const btnShow = $("btnShow");
+  const btnRefresh = document.getElementById("btnRefresh");
+  if (btnRefresh) btnRefresh.addEventListener("click", refreshGameList);
   if (btnShow) btnShow.addEventListener("click", togglePw);
 
   if (BTN_FETCH) BTN_FETCH.addEventListener("click", fetchCode);
