@@ -30,6 +30,7 @@ body{
 
 /* Header */
 .app-header{
+  position:sticky;
   display:flex; align-items:center; justify-content:space-between;
   padding: 12px 16px 4px;
     font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
@@ -40,8 +41,18 @@ body{
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale; }
 
+.license-strip{
+  position: sticky;
+  top: var(--header-h);           /* sits right under the header */
+  z-index: 48;                    /* header(50) > license(48) > search(45) */
+  background: var(--affix-bg);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
 /* License strip */
 .license-strip{
+  position: sticky;
   display:flex; align-items:center; gap:10px;
   margin: 8px 16px 12px;
   background: linear-gradient(90deg, rgba(99,102,241,.18), rgba(59,130,246,.12));
@@ -73,10 +84,12 @@ body{
 
 /* Search */
 .searchbar{
-  display:flex; gap:10px; margin: 0 16px 12px;
-    font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  position: sticky;
+  top: calc(var(--header-h) + var(--lic-h));
+  z-index: 45;
+  background: var(--affix-bg);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 .searchbar input[type="search"]{
   flex:1; padding:10px 12px; border-radius:12px;
@@ -158,8 +171,15 @@ body{
 
 /* Right panel */
 .panel{
-  background: var(--panel); border:1px solid var(--border);
-  border-radius: var(--radius); padding:14px; min-height:420px; box-shadow: var(--shadow);
+  position: sticky;
+  top: calc(var(--header-h) + var(--lic-h) + var(--search-h) + 12px);
+  z-index: 40;
+  transition: opacity .18s ease, transform .18s ease; /* from previous step */
+}
+.panel{
+  max-height: calc(100vh - (var(--header-h) + var(--lic-h) + var(--search-h) + 24px));
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 .hero{
   width:100%; height:140px; border-radius:12px; overflow:hidden;
@@ -378,13 +398,16 @@ body{
 .mt-6{ margin-top: 6px; }
 /* ---- Brand / Header Logo ---- */
 .app-header{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  padding:10px 14px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(8px);
+  background: var(--affix-bg);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
 .brand{
+  position:sticky;
   display:flex;
   align-items:center;
   gap:10px;
@@ -392,6 +415,7 @@ body{
 }
 
 .brand-logo{
+  position:sticky;
   width:56px;
   height:56px;
   object-fit:contain;
@@ -400,6 +424,7 @@ body{
 }
 
 .brand-title{
+  position:sticky;
   font-weight:600;
   font-size:22px;
   letter-spacing:.2px;
@@ -422,6 +447,10 @@ body{
   --primary:#7aa2ff;
   --shadow: 0 12px 40px rgba(0,0,0,.35);
   --radius: 14px;
+  --header-h: 56px;    /* will be updated by JS */
+  --lic-h: 0px;        /* license strip height (0 when hidden) */
+  --search-h: 56px;    /* will be updated by JS */
+  --affix-bg: rgba(18,20,28,.72);
 }
 
 * { box-sizing: border-box; }
@@ -443,19 +472,10 @@ body{
 /* Header */
 .app-header{
   display:flex; align-items:center; justify-content:space-between;
+  position:sticky;
   padding: 12px 16px 4px;
 }
 
-/* License strip */
-.license-strip{
-  display:flex; align-items:center; gap:10px;
-  margin: 8px 16px 12px;
-  background: linear-gradient(90deg, rgba(99,102,241,.18), rgba(59,130,246,.12));
-  border: 1px solid var(--border);
-  border-radius: 12px; padding: 10px 12px;
-  color: var(--text); box-shadow: var(--shadow);
-  animation: fadeIn .3s ease-out both;
-}
 .lic-text{ font-size:13px; }
 .badge {
   padding: 4px 8px; border-radius: 999px; font-size: 11.5px;
@@ -509,8 +529,8 @@ body{
 
 /* Layout */
 .layout{
-  display:grid; grid-template-columns: 1fr 420px; gap:18px;
-  padding: 0 16px 72px;
+  align-items: flex-start;   /* so the aside can size itself */
+  overflow: visible;
 }
 @media (max-width: 1100px){ .layout{ grid-template-columns: 1fr; } }
 
@@ -635,3 +655,35 @@ body{
 
 .cardgrid.locked .card { pointer-events: none; cursor: not-allowed; }
 .cardgrid.locked .card .cover { filter: grayscale(20%); opacity: .7; }
+/* Global tuning: 1 = default, <1 zooms OUT, >1 zooms IN */
+:root {
+  --thumb-zoom: 0.90;         /* try 0.90 (90% size) */
+  --thumb-pos-y: 50%;         /* 0% top … 100% bottom */
+}
+
+/* Square thumbs, center-cropped, zoom-adjustable */
+.card .cover {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  object-position: 50% var(--thumb-pos-y);
+  transform: scale(var(--thumb-zoom));
+  transform-origin: center;
+  display: block;
+  border-radius: 10px;
+}
+
+
+/* If the image fails, keep a square placeholder */
+.card .placeholder {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.6);
+  font-size: 12px;
+  text-align: center;
+  padding: 8px;
+}

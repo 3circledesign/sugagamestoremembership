@@ -1,6 +1,10 @@
 // ===== Helpers =====
 const $ = id => document.getElementById(id);
 
+// GitHub fallback cover (main branch, <appid>.jpg at repo root)
+const GH_COVER = (appid) =>
+  `https://raw.githubusercontent.com/barryhamsy/gamelist/main/${encodeURIComponent(appid)}.jpg`;
+
 // Accept multiple possible key field names from backend
 function getServerCdKey(st){
   if (!st || typeof st !== "object") return "";
@@ -42,6 +46,7 @@ const HERO_IMG = $("heroCover");
 const HERO_PH = $("heroPlaceholder");
 const BTN_FETCH = $("btnFetch");
 const BTN_ACTIVATE = $("btnActivate");
+const BTN_LOGIN = $("btnLogin"); // NEW
 
 // Modal refs
 const MODAL_BACKDROP = $("actBackdrop");
@@ -63,6 +68,16 @@ function show(el){ el.style.display = el.classList.contains('modal-backdrop') ? 
 function hide(el){ el.style.display = 'none'; }
 function daysWord(d){ if (d == null) return ''; return d === 1 ? '1 day' : (d + ' days'); }
 function setStatus(s){ $("status").textContent = s || ""; }
+
+// Code UI helper (works with new or old markup)
+function setCodeUI(code){
+  if (typeof window.setCodeDigits === "function"){
+    window.setCodeDigits(code || "");
+  } else {
+    const el = $("code");
+    if (el) el.textContent = code ? code : "— — — — —";
+  }
+}
 
 // ----- Steam users helpers -----
 async function loadSteamUsers(){
@@ -147,6 +162,7 @@ function updateActivationDependentUI(st){
 
   if (BTN_FETCH) BTN_FETCH.disabled = !active;
   if (BTN_ACTIVATE) BTN_ACTIVATE.textContent = active ? "Show Details" : "Activate";
+  if (BTN_LOGIN) BTN_LOGIN.disabled = !active; // NEW
 
   document.querySelectorAll(".card").forEach(card => {
     const appid = card.dataset.appid;
@@ -314,7 +330,7 @@ async function doActivate(){
   let steamid = "";
   if (SEL_STEAM && !SEL_STEAM.disabled){
     steamid = (SEL_STEAM.value || "").trim();
-  } else {
+  } else if (INP_STEAM) {
     steamid = (INP_STEAM.value || "").trim();
   }
 
@@ -369,37 +385,70 @@ function showHeroPlaceholder(text){
   HERO_WRAP.classList.add("empty");
 }
 
-function showHeroImage(url, alt){
-  HERO_IMG.onload = () => { HERO_PH.style.display = "none"; HERO_IMG.style.display = "block"; HERO_WRAP.classList.remove("empty"); };
-  HERO_IMG.onerror = () => { showHeroPlaceholder("Game cover not available"); };
+function showHeroImage(url, alt, fallbackUrl){
+  HERO_IMG.onload = () => {
+    HERO_PH.style.display = "none";
+    HERO_IMG.style.display = "block";
+    HERO_WRAP.classList.remove("empty");
+  };
+  HERO_IMG.onerror = () => {
+    // try one fallback URL, then give up to placeholder
+    if (fallbackUrl && !HERO_IMG.dataset.fallbackTried){
+      HERO_IMG.dataset.fallbackTried = "1";
+      HERO_IMG.src = fallbackUrl;
+      return;
+    }
+    showHeroPlaceholder("Game cover not available");
+  };
   HERO_IMG.alt = alt || "";
-  HERO_IMG.style.display = "none"; HERO_PH.style.display = "grid"; HERO_WRAP.classList.remove("empty");
+  HERO_IMG.style.display = "none";
+  HERO_PH.style.display = "grid";
+  HERO_WRAP.classList.remove("empty");
+  HERO_IMG.removeAttribute("data-fallback-tried"); // reset flag each time
+  HERO_IMG.referrerPolicy = "no-referrer";
   HERO_IMG.src = url;
 }
+
 
 function setPanelPlaceholder(){
   showHeroPlaceholder("Please select a game to show details");
   $("gameTitle").textContent = "Select a game";
   $("gameSub").textContent = "";
-  $("username").value = "";
-  $("password").value = "";
-  $("code").textContent = "— — — — —";
+  if ($("username")) $("username").value = "";
+  if ($("password")) $("password").value = ""; // stub-safe
+  setCodeUI(null);
   setStatus("");
   selectedAppId = null;
 }
 
+// Force a fixed page size (set to null/0 to disable)
+window.FORCE_PAGE_SIZE = 20;
+
 function computeAutoPageSize(){
+  if (window.FORCE_PAGE_SIZE && Number.isInteger(window.FORCE_PAGE_SIZE) && window.FORCE_PAGE_SIZE > 0) {
+    return window.FORCE_PAGE_SIZE;   // <- fixed count per page
+  }
+
+  // fallback to your existing auto logic if FORCE_PAGE_SIZE is not set
   const gridW = GRID.clientWidth || 800;
   const gap = 12, minCardW = 150;
   const cols = Math.max(1, Math.floor((gridW + gap) / (minCardW + gap)));
   const cardW = (gridW - (cols - 1) * gap) / cols;
-  const cardH = cardW * 3/2 + 60;
+
+  // SQUARE thumbs now
+  const ratio = 1.0;
+  const metaH = 60;
+  const cardH = Math.round(cardW * ratio + metaH);
+
   const headerH = document.querySelector('.app-header')?.offsetHeight || 56;
-  const margin = 180;
-  const availH = Math.max(280, window.innerHeight - headerH - margin);
-  const rows = Math.max(1, Math.floor(availH / (cardH + gap)));
-  return Math.max(cols * rows, cols);
+  const pagerH  = document.getElementById('pager')?.offsetHeight || 48;
+  const vPad    = 48;
+  const availH  = Math.max(260, window.innerHeight - headerH - pagerH - vPad);
+
+  const rows = Math.max(1, Math.floor((availH + gap) / (cardH + gap)));
+  return Math.max(1, cols * rows);
 }
+
 function pageCount(){ const ps = computeAutoPageSize(); return Math.max(1, Math.ceil(FILTERED.length / ps)); }
 
 function makeCard(g){
@@ -409,15 +458,32 @@ function makeCard(g){
   d.dataset.appid = g.appid;
 
   const img = document.createElement("img");
-  img.className = "cover"; img.loading = "lazy";
-  img.src = `https://steamcdn-a.akamaihd.net/steam/apps/${g.appid}/library_600x900.jpg`;
+  img.className = "cover";
+  img.loading = "lazy";
+
+  const primary = `https://steamcdn-a.akamaihd.net/steam/apps/${g.appid}/library_600x900.jpg`;
+  const fallback = GH_COVER(g.appid);
+
+  // try steam first
+  img.src = primary;
   img.alt = g.name || "";
+
+  // onerror → try GitHub once, then placeholder
   img.onerror = () => {
+    // if we haven't tried the GH fallback yet, try it now
+    if (!img.dataset.fallbackTried) {
+      img.dataset.fallbackTried = "1";
+      img.src = fallback;
+      return;
+    }
+    // both failed → show a square placeholder
     const ph = document.createElement("div");
     ph.className = "placeholder";
-    ph.textContent = "Game cover not available";
+    ph.textContent = "Cover not available";
     img.replaceWith(ph);
   };
+
+  img.referrerPolicy = "no-referrer"; // avoid referrer issues on some CDNs
 
   const meta = document.createElement("div"); meta.className = "meta";
   const name = document.createElement("div"); name.className = "gname"; name.textContent = g.name || "(Untitled)";
@@ -440,6 +506,7 @@ function makeCard(g){
   }
   return d;
 }
+
 
 function render(){
   const ps = computeAutoPageSize();
@@ -490,24 +557,27 @@ async function selectGame(appid, cardEl){
     showHeroImage(coverUrl, j.name || "");
     $("gameTitle").textContent = j.name || "(Untitled)";
     $("gameSub").textContent   = "AppID " + j.appid;
-    $("username").value = j.username || "";
-    $("password").value = j.password || "";
-    $("code").textContent = "— — — — —";
+    if ($("username")) $("username").value = j.username || "";
+    // Do NOT display password; backend should not return it. Clear if stub exists:
+    if ($("password")) $("password").value = "";
+    setCodeUI(null);
     setStatus("Ready.");
   }catch(e){ setPanelPlaceholder(); }
 }
 
 // ----- Actions -----
 function togglePw(){
+  // keep for compatibility if stubs exist; UI shouldn't expose password anyway
   const pw = $("password"), btn = $("btnShow");
+  if(!pw || !btn) return;
   if(pw.type === "password"){ pw.type = "text"; btn.textContent = "Hide"; }
   else { pw.type = "password"; btn.textContent = "Show"; }
 }
 
 async function fetchCode(){
-  const uname = $("username").value.trim();
+  const uname = ($("username")?.value || "").trim();
   if(!uname){
-    $("code").textContent = "— — — — —";
+    setCodeUI(null);
     setStatus("Please enter username.");
     return;
   }
@@ -525,17 +595,17 @@ async function fetchCode(){
 
   // 🔒 lock the grid & disable button
   setGridLocked(true);
-  BTN_FETCH.disabled = true;
+  if (BTN_FETCH) BTN_FETCH.disabled = true;
 
   try {
     const r = await fetch("/api/latest-code?username=" + encodeURIComponent(uname));
     const j = await r.json();
 
     if(j.status === "ok"){
-      $("code").textContent = j.code;
+      setCodeUI(j.code);
       setStatus("Latest code loaded.");
     } else if (j.status === "too_old" || j.status === "no_match"){
-      $("code").textContent = "— — — — —";
+      setCodeUI(null);
       setStatus("No New Code found, please try login again.");
     } else if (j.error === "license_expired"){
       openActivate({ expired: true, expiry_date: CURRENT_LICENSE && CURRENT_LICENSE.expiry_date });
@@ -549,34 +619,95 @@ async function fetchCode(){
       setStatus("Unknown response.");
     }
   } catch(e) {
-    $("code").textContent = "— — — — —";
+    setCodeUI(null);
     setStatus("Request failed.");
   } finally {
     // 🔓 always unlock the grid & re-enable button
-    BTN_FETCH.disabled = false;
+    if (BTN_FETCH) BTN_FETCH.disabled = false;
     setGridLocked(false);
+  }
+}
+
+// NEW: Login to Steam (password is read by backend from game_list.dat)
+async function loginToSteam(){
+  if(!CURRENT_LICENSE || CURRENT_LICENSE.status!=="active"){
+    setStatus("Activate your license first.");
+    openActivate({
+      expired: CURRENT_LICENSE && CURRENT_LICENSE.status === "expired",
+      revoked: CURRENT_LICENSE && CURRENT_LICENSE.status === "revoked",
+      expiry_date: CURRENT_LICENSE && CURRENT_LICENSE.expiry_date
+    });
+    return;
+  }
+  if(!selectedAppId){
+    setStatus("Select a game first.");
+    return;
+  }
+
+  setStatus("Launching Steam and submitting login…");
+  setGridLocked(true);
+  if (BTN_LOGIN) BTN_LOGIN.disabled = true;
+  if (BTN_FETCH) BTN_FETCH.disabled = true;
+
+  try{
+    const r = await fetch("/api/steam/login", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ appid: String(selectedAppId) })
+    });
+    const j = await r.json().catch(()=> ({}));
+
+    if (r.ok && (j.status === "ok")){
+      setStatus("Login submitted. If Steam Guard appears, click Fetch Steam Guard Code.");
+    } else if (r.ok && j.status === "guard_wait"){
+      setStatus("Steam Guard required. Click Fetch Steam Guard Code.");
+    } else if (j && j.error){
+      const map = {
+        deps_missing: "Missing desktop automation libraries (pywinauto/pyautogui).",
+        steam_not_found: "Steam not found (registry/InstallPath missing).",
+        appid_required: "No AppID was provided.",
+        credentials_not_found: "No credentials for this AppID.",
+        login_window_control_failed: "Could not control Steam login window."
+      };
+      setStatus(map[j.error] || (j.message || "Login failed."));
+    } else {
+      setStatus("Login failed.");
+    }
+  }catch(e){
+    setStatus("Request failed.");
+  } finally {
+    setGridLocked(false);
+    if (BTN_LOGIN) BTN_LOGIN.disabled = false;
+    if (BTN_FETCH) BTN_FETCH.disabled = false;
   }
 }
 
 // ===== Bindings =====
 document.addEventListener("DOMContentLoaded", async () => {
-  $("btnShow").addEventListener("click", togglePw);
-  BTN_FETCH.addEventListener("click", fetchCode);
-  $("prevBtn").addEventListener("click", goPrev);
-  $("nextBtn").addEventListener("click", goNext);
-  $("search").addEventListener("input", doSearch);
-  $("clearBtn").addEventListener("click", () => { $("search").value = ""; doSearch(); });
+  // Guard these in case stubs are missing
+  const btnShow = $("btnShow");
+  if (btnShow) btnShow.addEventListener("click", togglePw);
+
+  if (BTN_FETCH) BTN_FETCH.addEventListener("click", fetchCode);
+  if ($("prevBtn")) $("prevBtn").addEventListener("click", goPrev);
+  if ($("nextBtn")) $("nextBtn").addEventListener("click", goNext);
+  if ($("search")) $("search").addEventListener("input", doSearch);
+  if ($("clearBtn")) $("clearBtn").addEventListener("click", () => { $("search").value = ""; doSearch(); });
 
   // Top button: async open so we can ensure fresh cd_key first
-  BTN_ACTIVATE.addEventListener("click", async () => { await openActivate({}); });
+  if (BTN_ACTIVATE) BTN_ACTIVATE.addEventListener("click", async () => { await openActivate({}); });
 
   // Modal actions
-  BTN_ACT_CANCEL.addEventListener("click", () => hide(MODAL_BACKDROP));
-  BTN_ACT_DO.addEventListener("click", doActivate);
-  INP_KEY.addEventListener("keydown", (e)=>{ if(e.key==="Enter"&&BTN_ACT_DO.style.display!=="none"){e.preventDefault();doActivate();} });
-  if (INP_STEAM) INP_STEAM.addEventListener("keydown", (e)=>{ if(e.key==="Enter"&&BTN_ACT_DO.style.display!=="none"){e.preventDefault();doActivate();} });
+  if (BTN_ACT_CANCEL) BTN_ACT_CANCEL.addEventListener("click", () => hide(MODAL_BACKDROP));
+  if (BTN_ACT_DO) BTN_ACT_DO.addEventListener("click", doActivate);
+  if (INP_KEY) INP_KEY.addEventListener("keydown", (e)=>{ if(e.key==="Enter"&&BTN_ACT_DO&&BTN_ACT_DO.style.display!=="none"){e.preventDefault();doActivate();} });
+  if (INP_STEAM) INP_STEAM.addEventListener("keydown", (e)=>{ if(e.key==="Enter"&&BTN_ACT_DO&&BTN_ACT_DO.style.display!=="none"){e.preventDefault();doActivate();} });
 
-  BTN_FETCH.disabled = true;
+  // NEW: Login button
+  if (BTN_LOGIN) BTN_LOGIN.addEventListener("click", loginToSteam);
+
+  if (BTN_FETCH) BTN_FETCH.disabled = true;
+  if (BTN_LOGIN) BTN_LOGIN.disabled = true;
 
   await loadLicense();
   await loadGames();
