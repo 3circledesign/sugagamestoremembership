@@ -36,6 +36,7 @@
   <div class="searchbar" role="search">
     <input id="search" type="search" placeholder="Search by game name or AppID…" aria-label="Search games" />
     <button class="btn" id="clearBtn">Clear</button>
+    <button class="btn tgl" id="btnOnline" aria-pressed="false" title="Show only games that support online">Online</button> <!-- NEW -->
     <button class="btn" id="btnRefresh" type="button" title="Re-download game list">Refresh</button>
   </div>
 
@@ -75,14 +76,14 @@
       </div>
 
       <!-- NEW: Login button -->
-      <div class="row">
-        <button class="btn primary" id="btnLogin" type="button" title="Auto-fill Steam login">Login to Steam</button>
-      </div>
-
-      <div class="row">
-        <button class="btn" id="btnFetch" type="button">Fetch Steam Guard Code</button>
-      </div>
-
+<div class="row row-actions">
+  <button class="btn" id="btnLogin" type="button">Login to Steam</button>
+  <button class="btn primary" id="btnFetch" type="button">Fetch Steam Guard Code</button>
+</div>
+<div class="row">
+  <button class="btn" id="btnAddGame" type="button">Add game to my account</button>
+  <button class="btn" id="btnRemoveGame" type="button">Remove game from my account</button>
+</div>
       <div id="codeWrap" class="row">
         <div id="code" class="code">
           <div class="placeholders" aria-hidden="true">‒ ‒ ‒ ‒ ‒</div>
@@ -98,6 +99,48 @@
       </div>
 
       <div id="status" class="ghost statusline"></div>
+      <hr class="hr mt-8">
+
+<h4 class="subhead">3rd Party Launcher Login</h4>
+
+<div class="row">
+  <div class="label">Platform</div>
+  <input id="tpPlatform" type="text" readonly />
+</div>
+
+<div class="row">
+  <div class="label">Username</div>
+  <input id="tpUser" type="text" readonly />
+  <button class="icon-btn" onclick="copyField('tpUser')" aria-label="Copy 3rd party username" title="Copy username">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+    </svg>
+  </button>
+</div>
+
+<div class="row">
+  <div class="label">Password</div>
+  <input id="tpPass" type="password" readonly />
+  <button class="icon-btn"
+          onclick="copyField('tpPass')"
+          aria-label="Copy 3rd-party password"
+          title="Copy password">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+         aria-hidden="true">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+    </svg>
+  </button>
+</div>
+<!-- Notes / Instructions -->
+<div id="notesWrap" class="notes-wrap hidden">
+  <div class="subhead">Notes / Instructions</div>
+  <div id="notes" class="notes"></div>
+</div>
+
     </aside>
   </main>
 

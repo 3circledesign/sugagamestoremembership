@@ -1,6 +1,19 @@
 // ===== Helpers =====
 const $ = id => document.getElementById(id);
 
+// ONLINE filter toggle
+let ONLINE_ONLY = false;
+let selectedRid = null;
+
+/** robust check for 1-year entitlement */
+function hasOnlineEntitlement(st){
+  if (!st || typeof st !== "object") return false;
+  const plan = String(st.plan || "").trim().toLowerCase();
+  // tolerate variations: "1y", "1 y", "1-year", "12m", "12 months", "yearly" etc.
+  return /\b(1\s*y|1-?year|12\s*m|12-?months|year|yearly)\b/.test(plan);
+}
+
+
 // GitHub fallback cover (main branch, <appid>.jpg at repo root)
 const GH_COVER = (appid) =>
   `https://raw.githubusercontent.com/barryhamsy/gamelist/main/${encodeURIComponent(appid)}.jpg`;
@@ -123,6 +136,42 @@ function populateSteamSelect(currentSteamId){
   SEL_STEAM.value = target;
 }
 
+/** return array after applying license gating + search + online toggle */
+function applyFilters(){
+  const q = ($("search")?.value || "").trim().toLowerCase();
+
+  // start from all items
+  let base = ALL.slice();
+
+  // text search
+  if (q){
+    base = base.filter(g =>
+      (g.name || "").toLowerCase().includes(q) ||
+      String(g.appid || "").includes(q)
+    );
+  }
+
+  // "Online" button toggle → show only online
+  if (ONLINE_ONLY){
+    base = base.filter(g => !!g.online_supported);
+  }
+
+  return base;
+}
+
+const BTN_ONLINE = document.getElementById("btnOnline");
+if (BTN_ONLINE){
+  BTN_ONLINE.addEventListener("click", () => {
+    ONLINE_ONLY = !ONLINE_ONLY;
+    BTN_ONLINE.classList.toggle("active", ONLINE_ONLY);
+    // reset to first page when switching filter
+    page = 1;
+    // re-render with new filter
+    render();
+  });
+}
+
+
 // ----- License strip + state -----
 function renderLicenseStrip(st){
   const strip = $("licStrip");
@@ -159,29 +208,36 @@ function renderLicenseStrip(st){
 /** Only toggle elements that depend on active/inactive; avoid rebuilding grid. */
 function updateActivationDependentUI(st){
   const active = st && st.status === "active";
+  const has1Y  = hasOnlineEntitlement(st);
 
-  if (BTN_FETCH) BTN_FETCH.disabled = !active;
+  if (BTN_FETCH)    BTN_FETCH.disabled = !active;
+  if (BTN_LOGIN)    BTN_LOGIN.disabled = !active;
   if (BTN_ACTIVATE) BTN_ACTIVATE.textContent = active ? "Show Details" : "Activate";
-  if (BTN_LOGIN) BTN_LOGIN.disabled = !active; // NEW
 
   document.querySelectorAll(".card").forEach(card => {
-    const appid = card.dataset.appid;
-    if (active) {
-      if (card.classList.contains("disabled")) {
-        card.classList.remove("disabled");
-        card.title = "";
-        card.onclick = () => { if (GRID_LOCKED) return; selectGame(appid, card); };
-      }
-    } else {
-      if (!card.classList.contains("disabled")) {
-        card.classList.add("disabled");
-        card.title = "Activate your license to view details";
-      }
+    const rid      = card.dataset.rid;
+    const isOnline = card.dataset.online === "1";
+
+    if (!active){
+      card.classList.add("disabled");
+      card.classList.remove("online-locked");
+      card.title = "Activate your license to view details";
       card.onclick = () => openActivate({
         expired: CURRENT_LICENSE && CURRENT_LICENSE.status === "expired",
         revoked: CURRENT_LICENSE && CURRENT_LICENSE.status === "revoked",
         expiry_date: CURRENT_LICENSE && CURRENT_LICENSE.expiry_date
       });
+      return;
+    }
+
+    if (isOnline && !has1Y){
+      card.classList.add("disabled","online-locked");
+      card.title = "ONLINE feature requires a 1-Year plan";
+      card.onclick = () => setStatus("ONLINE feature requires a 1-Year plan.");
+    } else {
+      card.classList.remove("disabled","online-locked");
+      card.title = "";
+      card.onclick = () => { if (GRID_LOCKED) return; selectGame(rid, card); };
     }
   });
 }
@@ -416,9 +472,12 @@ function setPanelPlaceholder(){
   $("gameSub").textContent = "";
   if ($("username")) $("username").value = "";
   if ($("password")) $("password").value = ""; // stub-safe
+  if ($("notes")) $("notes").textContent = "";
+  if ($("notesWrap")) $("notesWrap").classList.add("hidden");
   setCodeUI(null);
   setStatus("");
   selectedAppId = null;
+  setNotesContent("");
 }
 
 // Force a fixed page size (set to null/0 to disable)
@@ -449,51 +508,56 @@ function computeAutoPageSize(){
   return Math.max(1, cols * rows);
 }
 
-function pageCount(){ const ps = computeAutoPageSize(); return Math.max(1, Math.ceil(FILTERED.length / ps)); }
+function pageCount(){
+  const ps = computeAutoPageSize();
+  const total = applyFilters().length;
+  return Math.max(1, Math.ceil(total / ps));
+}
 
 function makeCard(g){
   const d = document.createElement("div");
   d.className = "card";
-  if (String(selectedAppId) === String(g.appid)) d.classList.add("selected");
-  d.dataset.appid = g.appid;
+  d.dataset.appid  = g.appid;
+  d.dataset.rid    = String(g.rid);           // <-- store RID
+  d.dataset.online = g.online_supported ? "1" : "0";
+  if (String(selectedRid) === String(g.rid)) d.classList.add("selected");
 
+  // cover
   const img = document.createElement("img");
   img.className = "cover";
   img.loading = "lazy";
-
-  const primary = `https://steamcdn-a.akamaihd.net/steam/apps/${g.appid}/library_600x900.jpg`;
+  const primary  = `https://steamcdn-a.akamaihd.net/steam/apps/${g.appid}/library_600x900.jpg`;
   const fallback = GH_COVER(g.appid);
-
-  // try steam first
   img.src = primary;
   img.alt = g.name || "";
-
-  // onerror → try GitHub once, then placeholder
   img.onerror = () => {
-    // if we haven't tried the GH fallback yet, try it now
-    if (!img.dataset.fallbackTried) {
-      img.dataset.fallbackTried = "1";
-      img.src = fallback;
-      return;
-    }
-    // both failed → show a square placeholder
-    const ph = document.createElement("div");
-    ph.className = "placeholder";
-    ph.textContent = "Cover not available";
+    if (!img.dataset.fallbackTried){ img.dataset.fallbackTried = "1"; img.src = fallback; return; }
+    const ph = document.createElement("div"); ph.className = "placeholder"; ph.textContent = "Cover not available";
     img.replaceWith(ph);
   };
+  img.referrerPolicy = "no-referrer";
 
-  img.referrerPolicy = "no-referrer"; // avoid referrer issues on some CDNs
+  // ONLINE pill over cover
+  if (g.online_supported){
+    const tag = document.createElement("span");
+    tag.className = "tag tag-online";
+    tag.textContent = "ONLINE";
+    d.appendChild(tag);
+  }
 
-  const meta = document.createElement("div"); meta.className = "meta";
-  const name = document.createElement("div"); name.className = "gname"; name.textContent = g.name || "(Untitled)";
+  // meta
+  const meta  = document.createElement("div"); meta.className = "meta";
+  const name  = document.createElement("div"); name.className = "gname";  name.textContent  = g.name || "(Untitled)";
   const appid = document.createElement("div"); appid.className = "appid"; appid.textContent = "AppID " + g.appid;
-
   meta.appendChild(name); meta.appendChild(appid);
   d.appendChild(img); d.appendChild(meta);
 
+  // click behavior / disabled state
   const active = (CURRENT_LICENSE && CURRENT_LICENSE.status === "active");
-  if (!active) {
+  const has1Y  = hasOnlineEntitlement(CURRENT_LICENSE);
+  const onlineLocked = g.online_supported && !has1Y;
+
+  if (!active){
     d.classList.add("disabled");
     d.title = "Activate your license to view details";
     d.onclick = () => openActivate({
@@ -501,23 +565,33 @@ function makeCard(g){
       revoked: CURRENT_LICENSE && CURRENT_LICENSE.status === "revoked",
       expiry_date: CURRENT_LICENSE && CURRENT_LICENSE.expiry_date
     });
+  } else if (onlineLocked){
+    d.classList.add("disabled","online-locked");
+    d.title = "ONLINE feature requires a 1-Year plan";
+    d.onclick = () => setStatus("ONLINE feature requires a 1-Year plan.");
   } else {
-    d.onclick = () => { if (GRID_LOCKED) return; selectGame(g.appid, d); };
+    d.onclick = () => {
+      if (GRID_LOCKED) return;
+      selectGame(String(g.rid), d);   // <-- pass RID only
+    };
   }
+
   return d;
 }
 
 
 function render(){
   const ps = computeAutoPageSize();
-  const totalPages = pageCount();
-  if(page > totalPages) page = totalPages;
+  const list = applyFilters();     // <— always filtered here
+  const totalPages = Math.max(1, Math.ceil(list.length / ps));
+  if (page > totalPages) page = totalPages;
+
   const start = (page - 1) * ps;
-  const chunk = FILTERED.slice(start, start + ps);
+  const chunk = list.slice(start, start + ps);
 
   GRID.innerHTML = "";
   chunk.forEach(g => GRID.appendChild(makeCard(g)));
-  EMPTY.classList.toggle("hidden", !!FILTERED.length);
+  EMPTY.classList.toggle("hidden", !!list.length);
 
   $("pageInfo").textContent = `Page ${totalPages ? page : 1} / ${totalPages}`;
   $("prevBtn").disabled = page <= 1;
@@ -531,18 +605,17 @@ function goNext(){ const t = pageCount(); if(page < t){ page++; render(); window
 
 const debounce = (fn, wait=200) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), wait); }; };
 const doSearch = debounce(() => {
-  const q = $("search").value.trim().toLowerCase();
-  FILTERED = !q ? ALL.slice() : ALL.filter(g => (g.name || "").toLowerCase().includes(q) || String(g.appid).includes(q));
-  page = 1; setPanelPlaceholder(); render();
+  page = 1;
+  setPanelPlaceholder();
+  render(); // filtering is handled inside render() via applyFilters()
 }, 200);
 
 async function loadGames(){
   const r = await fetch("/api/games");
   const j = await r.json();
   ALL = j.items || [];
-  FILTERED = ALL.slice();
   setPanelPlaceholder();
-  render();
+  render();             // applyFilters() will use the search text + online toggle + plan
 }
 
 async function refreshGameList(){
@@ -577,25 +650,51 @@ async function refreshGameList(){
 }
 
 
-async function selectGame(appid, cardEl){
+async function selectGame(rid, cardEl){
+  // highlight
   document.querySelectorAll(".card.selected").forEach(el => el.classList.remove("selected"));
-  cardEl?.classList.add("selected");
-  selectedAppId = appid;
+  if (cardEl) cardEl.classList.add("selected");
+
+  selectedRid  = String(rid);
+  selectedAppId = null; // will set after fetch
+
   try{
-    const r = await fetch("/api/game/" + encodeURIComponent(appid));
-    const j = await r.json();
-    if(j.error){ setPanelPlaceholder(); return; }
-    const coverUrl = `https://steamcdn-a.akamaihd.net/steam/apps/${j.appid}/header.jpg`;
-    showHeroImage(coverUrl, j.name || "");
+    const url = "/api/game/byid/" + encodeURIComponent(selectedRid); // <-- exact backend route
+    const r   = await fetch(url, { cache: "no-store" });
+    if (!r.ok){ setPanelPlaceholder(); return; }
+    const j   = await r.json();
+    if (j.error){ setPanelPlaceholder(); return; }
+
+    selectedAppId = j.appid || null;
+
+    const primaryHero = `https://steamcdn-a.akamaihd.net/steam/apps/${j.appid}/header.jpg`;
+    const ghFallback  = GH_COVER(j.appid);
+    showHeroImage(primaryHero, j.name || "", ghFallback);
+
     $("gameTitle").textContent = j.name || "(Untitled)";
     $("gameSub").textContent   = "AppID " + j.appid;
+
     if ($("username")) $("username").value = j.username || "";
-    // Do NOT display password; backend should not return it. Clear if stub exists:
     if ($("password")) $("password").value = "";
+
+    if ($("tpPlatform")) $("tpPlatform").value = j.third_platform || "";
+    if ($("tpUser"))     $("tpUser").value     = j.third_username || "";
+    if ($("tpPass"))     $("tpPass").value     = j.third_password ? String(j.third_password) : "";
+    setNotesContent(j.notes || j.instructions || j.note || "");
+    if ($("notes")) {
+        const t = (j.notes || "").trim();
+        $("notes").textContent = t;
+        const wrap = $("notesWrap");
+        if (wrap) wrap.classList.toggle("hidden", !t);
+    }
     setCodeUI(null);
     setStatus("Ready.");
-  }catch(e){ setPanelPlaceholder(); }
+  }catch(e){
+    console.error(e);
+    setPanelPlaceholder();
+  }
 }
+
 
 // ----- Actions -----
 function togglePw(){
@@ -671,7 +770,7 @@ async function loginToSteam(){
     });
     return;
   }
-  if(!selectedAppId){
+  if(!selectedRid){
     setStatus("Select a game first.");
     return;
   }
@@ -685,7 +784,7 @@ async function loginToSteam(){
     const r = await fetch("/api/steam/login", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ appid: String(selectedAppId) })
+      body: JSON.stringify({ rid: Number(selectedRid) })  // <-- RID to backend
     });
     const j = await r.json().catch(()=> ({}));
 
@@ -697,8 +796,8 @@ async function loginToSteam(){
       const map = {
         deps_missing: "Missing desktop automation libraries (pywinauto/pyautogui).",
         steam_not_found: "Steam not found (registry/InstallPath missing).",
-        appid_required: "No AppID was provided.",
-        credentials_not_found: "No credentials for this AppID.",
+        appid_required: "No AppID/RID was provided.",
+        credentials_not_found: "No credentials for this record.",
         login_window_control_failed: "Could not control Steam login window."
       };
       setStatus(map[j.error] || (j.message || "Login failed."));
@@ -719,6 +818,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Guard these in case stubs are missing
   const btnShow = $("btnShow");
   const btnRefresh = document.getElementById("btnRefresh");
+
+  const btnCopyNotes = document.getElementById("btnCopyNotes");
+  if (btnCopyNotes) btnCopyNotes.addEventListener("click", copyNotes);
+
+// Optional: allow double-click on the notes box to copy (no extra HTML needed)
+  const notesBox = document.getElementById("notes");
+  if (notesBox) {
+    notesBox.addEventListener("dblclick", (e) => {
+        const sel = window.getSelection && window.getSelection().toString();
+        if (sel && sel.trim()) return;  // user is selecting text — don't auto-copy
+        copyNotes();                    // otherwise, quick copy
+    });
+  }
   if (btnRefresh) btnRefresh.addEventListener("click", refreshGameList);
   if (btnShow) btnShow.addEventListener("click", togglePw);
 
@@ -727,7 +839,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   if ($("nextBtn")) $("nextBtn").addEventListener("click", goNext);
   if ($("search")) $("search").addEventListener("input", doSearch);
   if ($("clearBtn")) $("clearBtn").addEventListener("click", () => { $("search").value = ""; doSearch(); });
-
+    if (BTN_ADD) BTN_ADD.addEventListener("click", addGameToAccount);
   // Top button: async open so we can ensure fresh cd_key first
   if (BTN_ACTIVATE) BTN_ACTIVATE.addEventListener("click", async () => { await openActivate({}); });
 
@@ -749,3 +861,219 @@ document.addEventListener("DOMContentLoaded", async () => {
   setInterval(loadLicense, 15_000);
   window.addEventListener("resize", (()=>{ let t; return ()=>{ clearTimeout(t); t=setTimeout(render,120); }; })());
 });
+// --- Right panel alignment with header/logo ---
+function updatePanelPullUp() {
+  const lic = document.getElementById('licStrip');
+  const sb  = document.querySelector('.searchbar');
+
+  const fullOuterH = el => {
+    if (!el) return 0;
+    const cs = getComputedStyle(el);
+    return el.offsetHeight
+         + parseFloat(cs.marginTop || 0)
+         + parseFloat(cs.marginBottom || 0);
+  };
+
+  let h = 0;
+  // only count license strip if it is visible
+  if (lic && !lic.classList.contains('hidden')) h += fullOuterH(lic);
+  h += fullOuterH(sb);
+
+  // write to CSS variable
+  document.documentElement.style.setProperty('--affix-stack-h', `${h}px`);
+}
+document.addEventListener('DOMContentLoaded', () => {
+  updatePanelPullUp();
+  window.addEventListener('resize', () => {
+    // debounce a little to avoid layout thrash
+    clearTimeout(updatePanelPullUp._t);
+    updatePanelPullUp._t = setTimeout(updatePanelPullUp, 80);
+  });
+});
+
+// ensure recalculation when license bar toggles/changes
+const _renderLicenseStrip = renderLicenseStrip;  // keep a ref if you want to patch
+renderLicenseStrip = function(st){
+  _renderLicenseStrip(st);
+  updatePanelPullUp();
+};
+
+(function(){
+  function setAffixHeights(){
+    const h = document.querySelector('.app-header');
+    const l = document.getElementById('licStrip');
+    const s = document.querySelector('.searchbar');
+    const root = document.documentElement;
+    root.style.setProperty('--header-h', `${(h?.offsetHeight||0)}px`);
+    root.style.setProperty('--lic-h',    `${(l?.offsetHeight||0)}px`);
+    root.style.setProperty('--search-h', `${(s?.offsetHeight||0)}px`);
+  }
+  setAffixHeights();
+  window.addEventListener('resize', () => { clearTimeout(setAffixHeights._t); setAffixHeights._t = setTimeout(setAffixHeights, 120); });
+})();
+
+const BTN_ADD = document.getElementById("btnAddGame");
+const BTN_REMOVE = document.getElementById("btnRemoveGame");
+
+function clearStatusAfter(ms=2000){
+  const el = document.getElementById("status");
+  if (!el) return;
+  clearTimeout(clearStatusAfter._tid);
+  clearStatusAfter._tid = setTimeout(() => { el.textContent = ""; }, ms);
+}
+
+async function addGameToAccount(){
+  if (!CURRENT_LICENSE || CURRENT_LICENSE.status !== "active"){
+    setStatus("Activate your license first.");
+    openActivate({
+      expired: CURRENT_LICENSE && CURRENT_LICENSE.status === "expired",
+      revoked: CURRENT_LICENSE && CURRENT_LICENSE.status === "revoked",
+      expiry_date: CURRENT_LICENSE && CURRENT_LICENSE.expiry_date
+    });
+    return;
+  }
+  if (selectedRid == null){
+    setStatus("Select a game first.");
+    return;
+  }
+
+  setGridLocked(true);
+  if (BTN_ADD) BTN_ADD.disabled = true;
+  setStatus("Checking install & preparing Steam…");
+
+  try{
+    const r = await fetch("/api/steam/add-game", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rid: Number(selectedRid) })
+    });
+    const j = await r.json().catch(()=> ({}));
+
+    if (r.ok && j.status === "ok"){
+      setStatus(`Done. AppID ${j.appid} added. Steam restarting…`);
+      clearStatusAfter(2000);
+    } else {
+      // Friendly error mapping
+      const code = (j && j.error) || (`HTTP_${r.status}`);
+      let msg = (j && (j.message || j.error)) || `HTTP ${r.status}`;
+
+      if (code === "app_not_installed"){
+        const libs = (j.libraries || []).join(", ");
+        msg = `Game not yet installed. Launch/install it in Steam, then try again.`;
+      } else if (code === "state_not_ready"){
+        msg = `Game not yet installed. Launch/install it in Steam, then try again.`;
+      } else if (code === "download_failed"){
+        msg = "Failed to download hid.dll. Check your connection and try again.";
+      } else if (code === "steam_not_found"){
+        msg = "Steam not found on this PC.";
+      }
+
+      setStatus("Add failed: " + msg);
+    }
+  }catch(e){
+    setStatus("Request failed: " + e);
+  }finally{
+    setGridLocked(false);
+    if (BTN_ADD) BTN_ADD.disabled = false;
+  }
+}
+
+async function removeGameFromAccount(){
+  if (selectedRid == null){
+    setStatus("Select a game first.");
+    return;
+  }
+  setGridLocked(true);
+  if (BTN_REMOVE) BTN_REMOVE.disabled = true;
+  setStatus("Removing from Steam…");
+
+  try{
+    const r = await fetch("/api/steam/remove-game", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rid: Number(selectedRid) })
+    });
+    const j = await r.json().catch(()=> ({}));
+
+    if (r.ok && j.status === "ok"){
+      setStatus(`Removed AppID ${j.appid} from your Steam list.`);
+      clearStatusAfter(2000);
+    } else {
+      const msg = (j && (j.message || j.error)) || `HTTP ${r.status}`;
+      setStatus("Remove failed: " + msg);
+    }
+  }catch(e){
+    setStatus("Request failed: " + e);
+  }finally{
+    setGridLocked(false);
+    if (BTN_REMOVE) BTN_REMOVE.disabled = false;
+  }
+}
+
+// Bind the remove button somewhere in your DOMContentLoaded:
+document.addEventListener("DOMContentLoaded", () => {
+  if (BTN_ADD)    BTN_ADD.addEventListener("click", addGameToAccount);
+  if (BTN_REMOVE) BTN_REMOVE.addEventListener("click", removeGameFromAccount);
+});
+
+function escapeHtml(s = "") {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function linkifyNotes(text = "") {
+  // escape HTML, then make links, then keep line breaks
+  let html = escapeHtml(text);
+
+  // linkify: http(s)://…, steam://…, and bare www.
+  html = html
+    .replace(/(https?:\/\/[^\s<]+)/gi, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
+    .replace(/(steam:\/\/[^\s<]+)/gi,  '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
+    .replace(/\b(www\.[^\s<]+)/gi,     '<a href="http://$1" target="_blank" rel="noopener noreferrer">$1</a>');
+
+  // preserve newlines
+  html = html.replace(/\r?\n/g, "<br>");
+  return html;
+}
+
+function setNotesContent(text) {
+  const wrap = document.getElementById("notesWrap");
+  const el   = document.getElementById("notes");
+  if (!el || !wrap) return;
+
+  const t = (text || "").trim();
+  if (!t) {
+    el.innerHTML = '<span class="muted">—</span>';
+    wrap.classList.add("hidden");
+  } else {
+    el.innerHTML = linkifyNotes(t);
+    wrap.classList.remove("hidden");
+  }
+}
+
+// Copy handlers
+function copyNotes() {
+  const el = document.getElementById("notes");
+  if (!el) return;
+  const txt = el.innerText.trim();
+  if (!txt) return;
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(txt).then(showToast);
+  } else {
+    const ta = document.createElement("textarea");
+    ta.value = txt;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    showToast();
+  }
+}
+
+// or just call it at the end of loadLicense():
+// await loadLicense();  -> already in your code
+// After CURRENT_LICENSE is set:
+updatePanelPullUp();
