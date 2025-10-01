@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SUGA GAME STORE MEMBERSHIP • Game Covers</title>
+  <link rel="icon" href="suga_logo.ico" type="image/x-icon">
+  <style>
+    :root{
+      --bg:#0b1220;
+      --card:#0f1a2e;
+      --text:#e6eefc;
+      --muted:#96a2be;
+      --accent:#7cc6ff;
+      --ring:#2a3a5d;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background: radial-gradient(1200px 600px at 20% -10%, #10213f 0, transparent 55%),
+                  radial-gradient(1000px 500px at 100% 0%, #09203f 0, transparent 60%),
+                  var(--bg);
+      color:var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    header{
+      position:sticky; top:0; z-index:10;
+      backdrop-filter: blur(10px);
+      background: rgba(11,18,32,.6);
+      border-bottom:1px solid var(--ring);
+    }
+    .bar{
+      max-width:1200px; margin:0 auto; padding:10px 16px;
+      display:flex; gap:12px; align-items:center; flex-wrap:wrap;
+    }
+    h1{font-size:16px; margin:0; letter-spacing:.2px; font-weight:600; display:flex; align-items:center; gap:10px;}
+    .logo{
+      width:22px; height:22px; border-radius:6px; flex:0 0 auto;
+      background: center/cover no-repeat url('suga_logo.ico');
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,.35));
+    }
+    .pill{
+      display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--ring);
+      border-radius:999px; background:rgba(255,255,255,.03)
+    }
+    .pill input{
+      all:unset; width:260px; max-width:60vw; color:var(--text);
+    }
+    .pill input::placeholder{color:var(--muted)}
+
+    .wrap{max-width:1200px; margin:20px auto; padding:0 16px 40px}
+    .grid{
+      display:grid; gap:14px;
+      grid-template-columns: repeat(auto-fill,minmax(160px,1fr));
+    }
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border:1px solid var(--ring);
+      border-radius:14px; overflow:hidden;
+      display:flex; flex-direction:column; min-height:280px;
+      transition: transform .15s ease, box-shadow .15s ease;
+    }
+    .card:hover{ transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,.35) }
+    .thumb{
+      aspect-ratio: 2/3; width:100%; background:#0a1427;
+      display:block; object-fit:cover;
+    }
+    .meta{padding:10px 12px; display:flex; flex-direction:column; gap:6px}
+    .name{font-size:14px; line-height:1.2}
+    .sub{font-size:12px; color:var(--muted)}
+    .row{display:flex; justify-content:space-between; align-items:center; gap:8px}
+    .link{color:var(--accent); text-decoration:none}
+    .link:hover{text-decoration:underline}
+
+    .toast{
+      position:fixed; bottom:18px; right:18px; background:#0e1b30; color:var(--text);
+      border:1px solid var(--ring); padding:10px 12px; border-radius:12px; opacity:0; transform:translateY(8px);
+      transition: all .18s ease; pointer-events:none;
+    }
+    .toast.show{opacity:1; transform:translateY(0)}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="bar">
+      <h1><span class="logo" aria-hidden="true"></span> SUGA GAME STORE MEMBERSHIP</h1>
+      <label class="pill" title="Search by name or AppID">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input id="q" type="search" placeholder="Search by name or AppID…" />
+      </label>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="grid" class="grid"></div>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const CDN = (appid) => `https://steamcdn-a.akamaihd.net/steam/apps/${appid}/library_600x900.jpg`;
+    const GHRAW = (appid) => `https://raw.githubusercontent.com/barryhamsy/gamelist/main/${appid}.jpg`;
+    const STORE = (appid) => `https://store.steampowered.com/app/${appid}/`;
+
+    const state = { all: [], view: [] };
+    const el = {
+      grid: document.getElementById('grid'),
+      q: document.getElementById('q'),
+      toast: document.getElementById('toast')
+    };
+
+    function showToast(msg){
+      const t = el.toast;
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(showToast._tid);
+      showToast._tid = setTimeout(() => t.classList.remove('show'), 1400);
+    }
+
+    function placeholder(appid){
+      return `https://placehold.co/400x600?text=${encodeURIComponent(appid)}`;
+    }
+
+    function setCoverWithFallback(img, appid){
+      img.onerror = () => {
+        img.onerror = () => {
+          img.onerror = null;
+          img.src = placeholder(appid);
+        };
+        img.src = GHRAW(appid);
+      };
+    }
+
+    function render(list){
+      el.grid.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      for(const g of list){
+        const card = document.createElement('article');
+        card.className = 'card';
+
+        const img = document.createElement('img');
+        img.className = 'thumb';
+        img.loading = 'lazy';
+        img.src = CDN(g.appid);
+        img.alt = g.name;
+        setCoverWithFallback(img, g.appid);
+        card.appendChild(img);
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        const name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = g.name;
+        const row = document.createElement('div');
+        row.className = 'row';
+        const sub = document.createElement('div');
+        sub.className = 'sub';
+        sub.textContent = `AppID: ${g.appid}`;
+        const link = document.createElement('a');
+        link.className = 'link';
+        link.href = STORE(g.appid);
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.textContent = 'Store →';
+        row.appendChild(sub);
+        row.appendChild(link);
+        meta.appendChild(name);
+        meta.appendChild(row);
+        card.appendChild(meta);
+
+        frag.appendChild(card);
+      }
+      el.grid.appendChild(frag);
+    }
+
+    function applyFilter(){
+      const q = el.q.value.trim().toLowerCase();
+      if(!q){
+        state.view = state.all.slice();
+      }else{
+        state.view = state.all.filter(g => (g.name||'').toLowerCase().includes(q) || String(g.appid).includes(q));
+      }
+      render(state.view);
+    }
+
+    function safeParseJSON(raw) {
+      try { return JSON.parse(raw); } catch(e) {}
+      let s = raw.replace(/,\s*([\]}])/g, '$1').trim();
+      try { return JSON.parse(s); } catch(e) {}
+      if (!s.trim().startsWith('[') && !s.trim().startsWith('{')) s = '[' + s + ']';
+      return JSON.parse(s);
+    }
+
+    function buildGithubRawFallbacks(){
+      const host = location.hostname; // e.g., barryhamsy.github.io
+      const user = host.replace('.github.io','');
+      const parts = location.pathname.split('/').filter(Boolean);
+      const repo = parts.length > 0 ? parts[0] : `${user}.github.io`;
+
+      const branches = ['gh-pages','main','master'];
+      const roots = ['', 'docs/'];
+      const urls = [];
+      for (const br of branches){
+        for (const root of roots){
+          urls.push(`https://raw.githubusercontent.com/${user}/${repo}/${br}/${root}games.json`);
+        }
+      }
+      return urls;
+    }
+
+    async function fetchFirst(urls){
+      for (const url of urls){
+        try{
+          const r = await fetch(url + (url.includes('?') ? '' : `?v=${Date.now()}`), { cache:'no-store' });
+          if (r.ok) return await r.text();
+        }catch(e){}
+      }
+      throw new Error('All sources failed');
+    }
+
+    async function loadGames(){
+      try{
+        const urls = [
+          './games.json?v=' + Date.now(),
+          ...buildGithubRawFallbacks()
+        ];
+        const raw = await fetchFirst(urls);
+        const data = safeParseJSON(raw);
+        const arr = Array.isArray(data) ? data : (Array.isArray(data.games) ? data.games : []);
+        const seen = new Set();
+        state.all = [];
+        for(const x of arr){
+          const appid = String(x.appid ?? '').trim();
+          const name = String(x.name ?? '').trim();
+          if(!appid || !name || seen.has(appid)) continue;
+          seen.add(appid);
+          state.all.push({appid, name});
+        }
+        showToast(`Loaded ${state.all.length} games`);
+        applyFilter();
+      }catch(err){
+        showToast('Failed to load games.json');
+        console.error(err);
+      }
+    }
+
+    el.q.addEventListener('input', applyFilter);
+    loadGames();
+  </script>
+</body>
+</html>
