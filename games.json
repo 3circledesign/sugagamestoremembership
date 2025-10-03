@@ -348,6 +348,10 @@
     "name": "Mortal Kombat 1"
   },
   {
+    "appid": "1984270",
+    "name": "Digimon Story Time Stranger"
+  },
+  {
     "appid": "1985810",
     "name": "Call of Duty®: Black Ops Cold War"
   },
@@ -788,16 +792,12 @@
     "name": "Call of Duty®: Modern Warfare® III"
   },
   {
-    "appid": "271590",
-    "name": "Grand Theft Auto V Legacy"
+    "appid": "362003",
+    "name": "Grand Theft Auto V"
   },
   {
     "appid": "368260",
     "name": "Marvel's Midnight Suns"
-  },
-  {
-    "appid": "394510",
-    "name": "HELLDIVERS™"
   },
   {
     "appid": "431960",
@@ -887,5 +887,4 @@
     "appid": "AlanWake2",
     "name": "Alan Wake 2"
   }
-
 ]
