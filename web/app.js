@@ -9,8 +9,9 @@ let selectedRid = null;
 function hasOnlineEntitlement(st){
   if (!st || typeof st !== "object") return false;
   const plan = String(st.plan || "").trim().toLowerCase();
-  // tolerate variations: "1y", "1 y", "1-year", "12m", "12 months", "yearly" etc.
-  return /\b(1\s*y|1-?year|12\s*m|12-?months|year|yearly)\b/.test(plan);
+  // Accept 1-year AND lifetime style plans
+  // tolerates: "1y", "1-year", "12m", "yearly", plus "lifetime", "life time", "permanent", "forever"
+  return /\b(1\s*y|1-?year|12\s*m|12-?months|year|yearly|life\s*-?\s*time|lifetime|permanent|forever)\b/.test(plan);
 }
 
 
@@ -1076,4 +1077,5 @@ function copyNotes() {
 // or just call it at the end of loadLicense():
 // await loadLicense();  -> already in your code
 // After CURRENT_LICENSE is set:
+
 updatePanelPullUp();
